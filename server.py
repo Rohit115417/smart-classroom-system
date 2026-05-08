@@ -7,6 +7,7 @@ import uuid
 from functools import wraps
 from typing import Any
 import flask
+import flask_cors
 
 from flask import (
     Flask,
