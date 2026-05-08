@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from dotenv import load_dotenv
 import json
 import os
 import time
@@ -7,7 +7,7 @@ import uuid
 from functools import wraps
 from typing import Any
 
-from dotenv import load_dotenv
+
 from flask import (
     Flask,
     Response,
