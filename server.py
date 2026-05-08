@@ -6,8 +6,7 @@ import time
 import uuid
 from functools import wraps
 from typing import Any
-import flask
-import flask_cors
+import flask_sqlalchemy
 
 from flask import (
     Flask,
