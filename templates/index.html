@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Live Class</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 55%, #111827 100%); min-height: 100vh; color: #e5e7eb; padding: 20px; }
+    .container { max-width: 1320px; margin: 0 auto; }
+    .header, .card { background: #111827; border: 1px solid #334155; border-radius: 16px; }
+    .header { padding: 24px 32px; margin-bottom: 24px; display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+    .card { padding: 22px; margin-bottom: 22px; }
+    .join-section { max-width: 620px; margin: 40px auto; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .grid-2 { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    input, textarea, button { font: inherit; }
+    input, textarea { width: 100%; padding: 14px 16px; border: 1px solid #334155; border-radius: 10px; background: #020617; color: #e5e7eb; margin-bottom: 12px; }
+    button { padding: 13px 18px; border: 0; border-radius: 10px; cursor: pointer; font-weight: 700; }
+    .btn { width: 100%; }
+    .btn-primary { background: #4f46e5; color: white; }
+    .btn-secondary { background: #334155; color: white; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-warning { background: #a16207; color: white; }
+    .video-container, .focus-cam { position: relative; overflow: hidden; border-radius: 12px; background: #000; }
+    .video-container { aspect-ratio: 16/9; }
+    .focus-cam { aspect-ratio: 4/3; }
+    .video-container video, .focus-cam video, .focus-cam canvas { width: 100%; height: 100%; object-fit: cover; }
+    .focus-cam video, .focus-cam canvas { position: absolute; inset: 0; transform: scaleX(-1); }
+    .video-label, .live-badge, .pill { display: inline-block; border-radius: 999px; font-weight: 700; font-size: 12px; }
+    .video-label { position: absolute; left: 12px; bottom: 12px; background: rgba(0, 0, 0, .7); padding: 6px 12px; }
+    .live-badge { position: absolute; top: 16px; left: 16px; background: #ef4444; padding: 6px 12px; display: none; }
+    .live-badge.active { display: inline-block; }
+    .status-bar { text-align: center; padding: 12px; border-radius: 10px; font-weight: 700; margin-bottom: 16px; }
+    .connected { background: rgba(22, 163, 74, .2); color: #86efac; }
+    .disconnected { background: rgba(220, 38, 38, .2); color: #fca5a5; }
+    .connecting { background: rgba(202, 138, 4, .2); color: #fde68a; }
+    .waiting { background: rgba(79, 70, 229, .2); color: #c7d2fe; }
+    .metric-card, .stream-box, .panel-item, .room-row { background: #020617; border: 1px solid #334155; border-radius: 12px; }
+    .metric-card, .stream-box { padding: 14px; text-align: center; }
+    .metric-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
+    .metric-value, .stream-box .v { font-size: 24px; font-weight: 800; margin-top: 6px; }
+    .chart-wrap { height: 220px; margin-top: 16px; }
+    .room-row { padding: 14px; margin-top: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .pill.live { background: rgba(22, 163, 74, .2); color: #86efac; padding: 5px 10px; }
+    .pill.offline { background: rgba(220, 38, 38, .2); color: #fca5a5; padding: 5px 10px; }
+    .pill.raised { background: rgba(202, 138, 4, .2); color: #fde68a; padding: 5px 10px; }
+    .hidden { display: none; }
+    .panel-list { display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow: auto; }
+    .panel-item { padding: 12px; }
+    .tiny { font-size: 12px; color: #94a3b8; }
+    .debug-info { font-family: monospace; font-size: 12px; color: #94a3b8; margin-top: 10px; }
+    .offscreen-monitor {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+      left: -9999px;
+      top: -9999px;
+    }
+    @media (max-width: 980px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: stretch; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header" style="margin-bottom:18px;">
+      <div>
+        <h2 style="margin:0;">Student Portal</h2>
+        <p class="tiny" style="font-size:14px; margin-top:4px;">Logged in as {{ current_user_payload.name }} • Student</p>
+      </div>
+      <div class="row"><a href="{{ url_for('logout_page') }}" style="color:#fecaca; font-weight:800; text-decoration:none;">Logout</a></div>
+    </div>
+    <div id="joinSection" class="join-section card">
+      <h2>Join Live Classroom</h2>
+      <p class="tiny" style="font-size:14px; margin:8px 0 18px;">Password-protected live class with focus tracking, announcements, raise hand, and chat.</p>
+      <input type="text" id="roomIdInput" placeholder="Enter Room ID" />
+      <input type="text" id="studentIdInput" placeholder="Your Student ID" />
+      <input type="text" id="studentNameInput" placeholder="Your Name" />
+      <input type="password" id="roomPasswordInput" placeholder="Room Password" />
+      <button class="btn btn-primary" onclick="joinRoom()">Join Stream</button>
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="loadActiveRooms()">Refresh Active Rooms</button>
+      <div style="margin-top: 24px;">
+        <div style="font-weight:700; margin-bottom:8px;">Active Streams</div>
+        <div id="roomListContent" class="tiny" style="text-align:center; padding:12px;">Loading...</div>
+      </div>
+    </div>
+
+    <div id="watchSection" class="hidden">
+      <div class="header">
+        <div>
+          <h1 id="streamTitle">Live Stream</h1>
+          <p class="tiny" style="font-size:14px; margin-top:4px;">Teacher: <span id="teacherNameDisplay">--</span></p>
+          <p class="tiny" style="font-size:14px; margin-top:4px;">Subject: <span id="subjectDisplay">--</span></p>
+          <p class="tiny" style="font-size:14px; margin-top:4px;">Student: <span id="studentNameDisplay">--</span> (ID: <span id="studentIdDisplay">--</span>)</p>
+        </div>
+        <div class="row">
+          <button class="btn-warning" id="raiseHandBtn" onclick="toggleHandRaise()">Raise Hand</button>
+          <button class="btn btn-danger" style="width:auto;" onclick="leaveStream()">Leave</button>
+        </div>
+      </div>
+
+      <div id="statusBar" class="status-bar connecting">Connecting...</div>
+
+      <div id="waitingScreen" class="card hidden">
+        <h2 style="margin-bottom:8px;">Waiting for teacher to go live...</h2>
+        <p class="tiny" style="font-size:14px;">The teacher camera will appear automatically when the class goes live.</p>
+      </div>
+
+      <div class="card" id="videoCard" style="display:none;">
+        <div class="grid-2">
+          <div>
+            <div class="video-container">
+              <video id="cameraVideo" autoplay playsinline></video>
+              <div class="live-badge" id="liveBadge">LIVE</div>
+              <div class="video-label">Teacher Live Media</div>
+            </div>
+            <div class="grid-3" style="margin-top:16px;">
+              <div class="stream-box"><div class="v" id="streamDuration">00:00</div><div class="tiny">Duration</div></div>
+              <div class="stream-box"><div class="v" id="teacherState">--</div><div class="tiny">Teacher State</div></div>
+              <div class="stream-box"><div class="v" id="handState">Down</div><div class="tiny">Hand Status</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <div class="card" id="focusCard">
+            <div style="font-weight:700; margin-bottom:12px;">Focus Tracker</div>
+            <div id="focusStatusBar" class="status-bar connecting">Initializing monitor...</div>
+            <div class="grid-3">
+              <div class="metric-card"><div class="metric-label">Attention</div><div class="metric-value" id="attentionScore">--</div></div>
+              <div class="metric-card"><div class="metric-label">Engagement</div><div class="metric-value" id="engagementLevel">--</div></div>
+              <div class="metric-card"><div class="metric-label">Mood</div><div class="metric-value" id="emotionDisplay">--</div><div class="tiny" id="emotionName">detecting...</div></div>
+            </div>
+            <div class="chart-wrap"><canvas id="attentionChart"></canvas></div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700; margin-bottom:10px;">Teacher Announcements</div>
+            <div id="announcementBanner" class="panel-item hidden" style="margin-bottom:10px;"></div>
+            <div id="announcementList" class="panel-list"><div class="panel-item tiny">No announcements yet.</div></div>
+          </div>
+
+
+          <div class="card">
+            <div style="font-weight:700; margin-bottom:10px;">Assignments & Tasks</div>
+            <div id="studentAssignmentList" class="panel-list"><div class="panel-item tiny">Join or select a room to load assignments.</div></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div style="font-weight:700; margin-bottom:10px;">Live Chat</div>
+            <div id="chatList" class="panel-list"><div class="panel-item tiny">No chat messages yet.</div></div>
+            <textarea id="studentChatInput" placeholder="Type a question or message"></textarea>
+            <div class="row" style="margin-top:10px;">
+              <button class="btn-secondary" onclick="sendStudentChat()">Send Chat</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700; margin-bottom:10px;">Class Info</div>
+            <div class="panel-item"><strong>Description</strong><div id="descriptionDisplay" class="tiny" style="margin-top:6px;">--</div></div>
+            <div class="panel-item"><strong>Engagement Summary</strong><div class="tiny" id="engagementSummary" style="margin-top:6px;">Waiting for data...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden monitor elements kept for current JavaScript -->
+  <div class="offscreen-monitor" aria-hidden="true">
+    <div class="focus-cam">
+      <video id="webcam" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    <div class="debug-info" id="debugInfo"></div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const CURRENT_USER = {{ current_user_payload|tojson }};
+    const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    const REPORT_INTERVAL = 5000;
+    const SIGNAL_POLL_INTERVAL = 1000;
+    const CHAT_INTERVAL = 2500;
+    const ANNOUNCEMENT_INTERVAL = 3000;
+    const emotionEmojis = { happy: '🙂', neutral: '😐', distracted: '😕', sleepy: '😴', away: '🚫' };
+
+    let roomId = '';
+    let studentId = '';
+    let studentName = '';
+    let eventSource = null;
+    let peerConnection = null;
+    let signalPollId = null;
+    let reportIntervalId = null;
+    let moodUiIntervalId = null;
+    let durationInterval = null;
+    let chatIntervalId = null;
+    let announcementIntervalId = null;
+    let lastStudentSignalId = 0;
+    let lastChatTs = 0;
+    let lastAnnouncementTs = 0;
+    let streamStartTime = null;
+    let attentionChart = null;
+    let attentionData = [];
+    let currentEmotionKey = 'neutral';
+    let currentAttention = 0;
+    let facePresent = false;
+    let blinkPenalty = 0;
+    let lastActivityAt = Date.now();
+    let windowFocused = true;
+    let isTeacherRemoved = false;
+    let isHandRaised = false;
+    let faceMesh = null;
+    let camera = null;
+    let localMonitorStream = null;
+    let tabSwitchCount = 0;
+    let awayCount = 0;
+
+    window.addEventListener('focus', () => { windowFocused = true; lastActivityAt = Date.now(); });
+    window.addEventListener('blur', () => { windowFocused = false; tabSwitchCount += 1; });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') awayCount += 1;
+    });
+    ['mousemove', 'keydown', 'click', 'scroll'].forEach((evt) => window.addEventListener(evt, () => { lastActivityAt = Date.now(); }, { passive: true }));
+
+    function setStatus(kind, message) {
+      const el = document.getElementById('statusBar');
+      el.className = `status-bar ${kind}`;
+      el.textContent = message;
+    }
+
+    function setFocusStatus(kind, message) {
+      const el = document.getElementById('focusStatusBar');
+      el.className = `status-bar ${kind}`;
+      el.textContent = message;
+    }
+
+    function formatSeconds(value) {
+      const mm = String(Math.floor(value / 60)).padStart(2, '0');
+      const ss = String(value % 60).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function startDurationClock() {
+      if (durationInterval) clearInterval(durationInterval);
+      streamStartTime = Date.now();
+      durationInterval = setInterval(() => {
+        const seconds = Math.floor((Date.now() - streamStartTime) / 1000);
+        document.getElementById('streamDuration').textContent = formatSeconds(seconds);
+      }, 1000);
+    }
+
+    function buildChart() {
+      const ctx = document.getElementById('attentionChart');
+      attentionChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'Attention', data: [], tension: 0.3, borderWidth: 3 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 100, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          },
+          plugins: { legend: { labels: { color: '#e5e7eb' } } }
+        }
+      });
+    }
+
+    function updateMoodDisplay() {
+      let engagement = 'Low';
+      if (currentAttention >= 80) engagement = 'High';
+      else if (currentAttention >= 55) engagement = 'Medium';
+
+      document.getElementById('attentionScore').textContent = `${currentAttention}%`;
+      document.getElementById('engagementLevel').textContent = engagement;
+      document.getElementById('emotionDisplay').textContent = emotionEmojis[currentEmotionKey] || '😐';
+      document.getElementById('emotionName').textContent = currentEmotionKey;
+      document.getElementById('engagementSummary').textContent = `Attention ${currentAttention}% • Mood ${currentEmotionKey} • Tab switches ${tabSwitchCount} • Away count ${awayCount}`;
+
+      const label = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      attentionData.push({ label, value: currentAttention });
+      if (attentionData.length > 12) attentionData.shift();
+      if (attentionChart) {
+        attentionChart.data.labels = attentionData.map(item => item.label);
+        attentionChart.data.datasets[0].data = attentionData.map(item => item.value);
+        attentionChart.update();
+      }
+    }
+
+    function distance(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function eyeAspectRatio(points) {
+      const vertical1 = distance(points[1], points[5]);
+      const vertical2 = distance(points[2], points[4]);
+      const horizontal = distance(points[0], points[3]) || 1;
+      return (vertical1 + vertical2) / (2.0 * horizontal);
+    }
+
+    function computeMoodFromSignals() {
+      const idleSeconds = (Date.now() - lastActivityAt) / 1000;
+      let score = 100;
+      if (!windowFocused || document.visibilityState !== 'visible') score -= 35;
+      if (!facePresent) score -= 30;
+      if (idleSeconds > 8) score -= 20;
+      if (idleSeconds > 15) score -= 15;
+      score -= blinkPenalty;
+      currentAttention = Math.max(0, Math.min(100, Math.round(score)));
+
+      if (!windowFocused || document.visibilityState !== 'visible') currentEmotionKey = 'away';
+      else if (!facePresent) currentEmotionKey = 'distracted';
+      else if (currentAttention >= 85) currentEmotionKey = 'happy';
+      else if (currentAttention >= 60) currentEmotionKey = 'neutral';
+      else if (blinkPenalty >= 15) currentEmotionKey = 'sleepy';
+      else currentEmotionKey = 'distracted';
+    }
+
+    async function handleTeacherRemoval(message) {
+      if (isTeacherRemoved) return;
+      isTeacherRemoved = true;
+      const finalMessage = message || 'You were removed from this room by the teacher.';
+      setStatus('disconnected', finalMessage);
+      setFocusStatus('disconnected', finalMessage);
+      await leaveStream({ notifyServer: false });
+      alert(finalMessage);
+    }
+
+    async function initFocusTracker() {
+      try {
+        buildChart();
+        const videoEl = document.getElementById('webcam');
+        const canvasEl = document.getElementById('canvas');
+        const canvasCtx = canvasEl.getContext('2d');
+        localMonitorStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        videoEl.srcObject = localMonitorStream;
+        await videoEl.play();
+        setFocusStatus('connected', 'Camera connected. Monitoring focus and mood.');
+
+        faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        faceMesh.onResults((results) => {
+          canvasEl.width = videoEl.videoWidth || 640;
+          canvasEl.height = videoEl.videoHeight || 480;
+          canvasCtx.save();
+          canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+          canvasCtx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+          facePresent = Boolean(results.multiFaceLandmarks && results.multiFaceLandmarks.length);
+          if (facePresent) {
+            const lm = results.multiFaceLandmarks[0];
+            const leftEye = [lm[33], lm[160], lm[158], lm[133], lm[153], lm[144]];
+            const rightEye = [lm[362], lm[385], lm[387], lm[263], lm[373], lm[380]];
+            const ear = (eyeAspectRatio(leftEye) + eyeAspectRatio(rightEye)) / 2;
+            blinkPenalty = ear < 0.19 ? 18 : 0;
+            document.getElementById('debugInfo').textContent = '';
+          } else {
+            blinkPenalty = 0;
+            document.getElementById('debugInfo').textContent = '';
+          }
+          canvasCtx.restore();
+          computeMoodFromSignals();
+        });
+
+        camera = new Camera(videoEl, {
+          onFrame: async () => { await faceMesh.send({ image: videoEl }); },
+          width: 640,
+          height: 480,
+        });
+        await camera.start();
+        updateMoodDisplay();
+      } catch (error) {
+        setFocusStatus('disconnected', `Monitor error: ${error.message}`);
+        document.getElementById('debugInfo').textContent = '';
+      }
+    }
+
+    async function loadActiveRooms() {
+      const container = document.getElementById('roomListContent');
+      container.innerHTML = 'Loading...';
+      try {
+        const resp = await fetch(`${API_BASE}/api/stream/rooms/active`);
+        const data = await resp.json();
+        if (!data.rooms || !data.rooms.length) {
+          container.innerHTML = '<p>No active streams right now</p>';
+          return;
+        }
+        container.innerHTML = data.rooms.map(room => `
+          <div class="room-row">
+            <div>
+              <div style="font-weight:700;">${room.room_name}</div>
+              <div class="tiny">Teacher: ${room.teacher_name}</div>
+              <div class="tiny">Subject: ${room.subject || '--'}</div>
+              <div class="tiny">Room ID: ${room.room_id}</div>
+            </div>
+            <div style="text-align:right; min-width:170px;">
+              <div class="pill ${room.is_live ? 'live' : 'offline'}">${room.is_live ? 'LIVE' : 'OFFLINE'}</div>
+              <div class="tiny" style="margin-top:6px;">${room.viewer_count} viewer(s)</div>
+              <div class="tiny" style="margin-top:4px;">${room.requires_password ? 'Password required' : 'Open room'}</div>
+              <button class="btn btn-secondary" style="margin-top:10px; padding:10px 14px; font-size:13px;" onclick="pickRoom('${room.room_id}')">Use Room</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        container.innerHTML = `<p>Could not load rooms: ${error.message}</p>`;
+      }
+    }
+
+    function pickRoom(id) {
+      document.getElementById('roomIdInput').value = id;
+    }
+
+    async function joinRoom() {
+      roomId = document.getElementById('roomIdInput').value.trim();
+      studentId = document.getElementById('studentIdInput').value.trim();
+      studentName = document.getElementById('studentNameInput').value.trim() || `Student ${studentId}`;
+      const password = document.getElementById('roomPasswordInput').value.trim();
+      if (!roomId || !studentId) {
+        alert('Room ID and Student ID are required.');
+        return;
+      }
+
+      try {
+        isTeacherRemoved = false;
+        setStatus('connecting', 'Checking room...');
+        const response = await fetch(`${API_BASE}/api/stream/room/${roomId}/info`);
+        if (!response.ok) throw new Error('Room not found');
+        const info = await response.json();
+
+        const joinResponse = await fetch(`${API_BASE}/api/student/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_id: roomId, student_id: studentId, name: studentName, password })
+        });
+        const joinData = await joinResponse.json().catch(() => ({}));
+        if (!joinResponse.ok) throw new Error(joinData.error || 'Could not join room');
+
+        document.getElementById('joinSection').classList.add('hidden');
+        document.getElementById('watchSection').classList.remove('hidden');
+        document.getElementById('streamTitle').textContent = info.room_name;
+        document.getElementById('teacherNameDisplay').textContent = info.teacher_name;
+        document.getElementById('subjectDisplay').textContent = info.subject || '--';
+        document.getElementById('studentNameDisplay').textContent = studentName;
+        document.getElementById('studentIdDisplay').textContent = studentId;
+        document.getElementById('teacherState').textContent = info.is_live ? 'Live' : 'Offline';
+        document.getElementById('descriptionDisplay').textContent = info.description || '--';
+
+        startDurationClock();
+        startSSE();
+        await initFocusTracker();
+        await fetchStudentAssignments();
+        await createStudentPeer();
+        startSignalPolling();
+        startReportLoop();
+        startChatPolling();
+        startAnnouncementPolling();
+        await fetchChats();
+        await fetchAnnouncements();
+      } catch (error) {
+        setStatus('disconnected', `Join failed: ${error.message}`);
+        alert(`Join failed: ${error.message}`);
+      }
+    }
+
+    function startSSE() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource(`${API_BASE}/api/stream/sfu/student/${roomId}/events?student_id=${encodeURIComponent(studentId)}`);
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'closed') {
+          alert('Room closed by teacher.');
+          leaveStream();
+          return;
+        }
+        if (data.type === 'removed_by_teacher') {
+          handleTeacherRemoval(data.message);
+          return;
+        }
+        document.getElementById('teacherState').textContent = data.is_live ? 'Live' : 'Offline';
+        document.getElementById('liveBadge').classList.toggle('active', Boolean(data.is_live));
+        if (data.is_live) {
+          setStatus('connected', data.teacher_camera_on ? 'Teacher is live. Connecting media...' : 'Teacher is live. Starting media...');
+          document.getElementById('waitingScreen').classList.add('hidden');
+          document.getElementById('videoCard').style.display = 'block';
+        } else {
+          setStatus('waiting', 'Connected. Waiting for teacher to go live.');
+          document.getElementById('waitingScreen').classList.remove('hidden');
+        }
+      };
+      eventSource.onerror = () => {
+        if (!isTeacherRemoved) setStatus('connecting', 'Trying to reconnect to room...');
+      };
+    }
+
+    async function createStudentPeer() {
+      if (peerConnection) peerConnection.close();
+      peerConnection = new RTCPeerConnection(RTC_CONFIG);
+      peerConnection.ontrack = (event) => {
+        const teacherVideo = document.getElementById('cameraVideo');
+        teacherVideo.srcObject = event.streams[0];
+        teacherVideo.play().catch(() => {});
+        document.getElementById('videoCard').style.display = 'block';
+        document.getElementById('waitingScreen').classList.add('hidden');
+        setStatus('connected', 'Teacher audio/video connected.');
+      };
+      peerConnection.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        await fetch(`${API_BASE}/api/stream/room/${roomId}/signal/teacher`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: studentId, payload: { type: 'candidate', candidate: event.candidate } })
+        });
+      };
+      peerConnection.onconnectionstatechange = () => {
+        const state = peerConnection.connectionState;
+        if (state === 'connected') setStatus('connected', 'Teacher audio/video connected.');
+        if (['failed', 'disconnected', 'closed'].includes(state)) setStatus('connecting', 'Connection changed. Waiting for teacher...');
+      };
+    }
+
+    function startSignalPolling() {
+      if (signalPollId) clearInterval(signalPollId);
+      signalPollId = setInterval(pollStudentSignals, SIGNAL_POLL_INTERVAL);
+      pollStudentSignals();
+    }
+
+    async function pollStudentSignals() {
+      if (!roomId || !studentId) return;
+      try {
+        const response = await fetch(`${API_BASE}/api/stream/room/${roomId}/signal/student/${studentId}?since=${lastStudentSignalId}`);
+        const data = await response.json();
+        for (const message of (data.messages || [])) {
+          lastStudentSignalId = Math.max(lastStudentSignalId, message.id);
+          const payload = message.payload || {};
+          if (payload.type === 'offer') {
+            if (!peerConnection) await createStudentPeer();
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            await fetch(`${API_BASE}/api/stream/room/${roomId}/signal/teacher`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ student_id: studentId, payload: { type: 'answer', answer: peerConnection.localDescription } })
+            });
+          } else if (payload.type === 'candidate' && payload.candidate) {
+            try { await peerConnection.addIceCandidate(payload.candidate); } catch (error) { console.error(error); }
+          } else if (payload.type === 'reset_peer') {
+            await createStudentPeer();
+          } else if (payload.type === 'announcement' && payload.announcement) {
+            showAnnouncementBanner(payload.announcement.text);
+            await fetchAnnouncements();
+          } else if (payload.type === 'removed_by_teacher') {
+            await handleTeacherRemoval(payload.reason);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Signal poll error', error);
+      }
+    }
+
+    function startReportLoop() {
+      if (reportIntervalId) clearInterval(reportIntervalId);
+      if (moodUiIntervalId) clearInterval(moodUiIntervalId);
+      reportIntervalId = setInterval(sendReport, REPORT_INTERVAL);
+      moodUiIntervalId = setInterval(() => { computeMoodFromSignals(); updateMoodDisplay(); }, 3000);
+      sendReport();
+    }
+
+    function startChatPolling() {
+      if (chatIntervalId) clearInterval(chatIntervalId);
+      chatIntervalId = setInterval(fetchChats, CHAT_INTERVAL);
+    }
+
+    function startAnnouncementPolling() {
+      if (announcementIntervalId) clearInterval(announcementIntervalId);
+      announcementIntervalId = setInterval(fetchAnnouncements, ANNOUNCEMENT_INTERVAL);
+    }
+
+    async function sendReport() {
+      computeMoodFromSignals();
+      updateMoodDisplay();
+      try {
+        const response = await fetch(`${API_BASE}/api/student/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: studentId,
+            name: studentName,
+            attention_score: currentAttention,
+            emotion: `${emotionEmojis[currentEmotionKey]} ${currentEmotionKey}`,
+            status: currentAttention >= 70 ? 'active' : (currentAttention >= 40 ? 'watching' : 'idle'),
+            hand_raised: isHandRaised,
+            tab_switch_count: tabSwitchCount,
+            away_count: awayCount,
+            watch_signals: { room_id: roomId }
+          })
+        });
+        if (response.status === 403) {
+          const data = await response.json().catch(() => ({}));
+          await handleTeacherRemoval(data.error || 'You were removed from this room by the teacher.');
+        }
+      } catch (error) {
+        console.error('Report error', error);
+      }
+    }
+
+    async function toggleHandRaise() {
+      if (!roomId || !studentId) return;
+      isHandRaised = !isHandRaised;
+      document.getElementById('handState').textContent = isHandRaised ? 'Raised' : 'Down';
+      document.getElementById('raiseHandBtn').textContent = isHandRaised ? 'Lower Hand' : 'Raise Hand';
+      try {
+        await fetch(`${API_BASE}/api/stream/room/${roomId}/student/${studentId}/hand`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hand_raised: isHandRaised })
+        });
+      } catch (error) {
+        console.error('Hand raise error', error);
+      }
+    }
+
+    async function sendStudentChat() {
+      if (!roomId) return;
+      const text = document.getElementById('studentChatInput').value.trim();
+      if (!text) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${roomId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author_type: 'student', author_id: studentId, name: studentName, text })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Chat send failed');
+        return;
+      }
+      document.getElementById('studentChatInput').value = '';
+      await fetchChats();
+    }
+
+    function renderChatList(messages) {
+      const box = document.getElementById('chatList');
+      if (!messages.length) {
+        box.innerHTML = '<div class="panel-item tiny">No chat messages yet.</div>';
+        return;
+      }
+      box.innerHTML = messages.slice().reverse().map(item => `<div class="panel-item"><strong>${item.name}</strong> <span class="tiny">${item.author_type}</span><div style="margin-top:4px;">${item.text}</div><div class="tiny" style="margin-top:6px;">${new Date((item.ts || 0) * 1000).toLocaleTimeString()}</div></div>`).join('');
+    }
+
+    async function fetchChats() {
+      if (!roomId) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${roomId}/chat?since=0`);
+      const data = await response.json();
+      (data.messages || []).forEach(item => { lastChatTs = Math.max(lastChatTs, Number(item.ts || 0)); });
+      renderChatList(data.messages || []);
+    }
+
+    function showAnnouncementBanner(text) {
+      const banner = document.getElementById('announcementBanner');
+      banner.textContent = text;
+      banner.classList.remove('hidden');
+      setTimeout(() => banner.classList.add('hidden'), 6000);
+    }
+
+    function renderAnnouncements(items) {
+      const box = document.getElementById('announcementList');
+      if (!items.length) {
+        box.innerHTML = '<div class="panel-item tiny">No announcements yet.</div>';
+        return;
+      }
+      box.innerHTML = items.slice().reverse().map(item => `<div class="panel-item"><strong>${item.teacher_name}</strong><div style="margin-top:4px;">${item.text}</div><div class="tiny" style="margin-top:6px;">${new Date((item.ts || 0) * 1000).toLocaleTimeString()}</div></div>`).join('');
+    }
+
+    async function fetchAnnouncements() {
+      if (!roomId) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${roomId}/announcements?since=0`);
+      const data = await response.json();
+      (data.announcements || []).forEach(item => { lastAnnouncementTs = Math.max(lastAnnouncementTs, Number(item.ts || 0)); });
+      renderAnnouncements(data.announcements || []);
+    }
+
+    async function leaveStream(options = {}) {
+      const { notifyServer = true } = options;
+      if (eventSource) { eventSource.close(); eventSource = null; }
+      if (signalPollId) { clearInterval(signalPollId); signalPollId = null; }
+      if (reportIntervalId) { clearInterval(reportIntervalId); reportIntervalId = null; }
+      if (moodUiIntervalId) { clearInterval(moodUiIntervalId); moodUiIntervalId = null; }
+      if (durationInterval) { clearInterval(durationInterval); durationInterval = null; }
+      if (chatIntervalId) { clearInterval(chatIntervalId); chatIntervalId = null; }
+      if (announcementIntervalId) { clearInterval(announcementIntervalId); announcementIntervalId = null; }
+      if (peerConnection) { peerConnection.close(); peerConnection = null; }
+      if (camera) { camera.stop(); camera = null; }
+      if (localMonitorStream) {
+        localMonitorStream.getTracks().forEach(track => track.stop());
+        localMonitorStream = null;
+      }
+      try {
+        if (notifyServer && roomId && studentId) {
+          await fetch(`${API_BASE}/api/student/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room_id: roomId, student_id: studentId })
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+      roomId = '';
+      studentId = '';
+      studentName = '';
+      lastStudentSignalId = 0;
+      isHandRaised = false;
+      document.getElementById('watchSection').classList.add('hidden');
+      document.getElementById('joinSection').classList.remove('hidden');
+      document.getElementById('cameraVideo').srcObject = null;
+      document.getElementById('webcam').srcObject = null;
+      document.getElementById('videoCard').style.display = 'none';
+      document.getElementById('raiseHandBtn').textContent = 'Raise Hand';
+      document.getElementById('handState').textContent = 'Down';
+      loadActiveRooms();
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (roomId && studentId && navigator.sendBeacon) {
+        const payload = JSON.stringify({ room_id: roomId, student_id: studentId });
+        navigator.sendBeacon(`${API_BASE}/api/student/leave`, new Blob([payload], { type: 'application/json' }));
+      }
+    });
+
+
+
+    function getStudentIdentity() {
+      if (CURRENT_USER && CURRENT_USER.role === 'student') {
+        return {
+          id: CURRENT_USER.student_code || String(CURRENT_USER.id),
+          name: CURRENT_USER.name || 'Student'
+        };
+      }
+      return { id: '', name: '' };
+    }
+
+    function prefillStudentProfile() {
+      const identity = getStudentIdentity();
+      const sid = document.getElementById('studentIdInput');
+      const sname = document.getElementById('studentNameInput');
+      if (sid && identity.id) sid.value = identity.id;
+      if (sname && identity.name) sname.value = identity.name;
+    }
+
+    async function fetchStudentAssignments() {
+      const box = document.getElementById('studentAssignmentList');
+      if (!box) return;
+      const queryRoom = roomId ? `?room_id=${encodeURIComponent(roomId)}` : '';
+      try {
+        const response = await fetch(`${API_BASE}/api/assignments${queryRoom}`);
+        const data = await response.json();
+        renderStudentAssignments(data.assignments || []);
+      } catch (error) {
+        box.innerHTML = `<div class="panel-item tiny">Could not load assignments: ${error.message}</div>`;
+      }
+    }
+
+    function renderStudentAssignments(items) {
+      const box = document.getElementById('studentAssignmentList');
+      if (!box) return;
+      if (!items.length) {
+        box.innerHTML = '<div class="panel-item tiny">No assignments for this room yet.</div>';
+        return;
+      }
+      box.innerHTML = items.map(item => {
+        const submitted = Boolean(item.my_submission);
+        return `
+          <div class="panel-item">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+              <strong>${escapeStudentHtml(item.title)}</strong>
+              <span class="pill ${submitted ? 'live' : 'raised'}">${submitted ? 'Submitted' : 'Pending'}</span>
+            </div>
+            <div class="tiny" style="margin-top:6px;">Room: ${escapeStudentHtml(item.room_id)} ${item.due_date ? '• Due: ' + escapeStudentHtml(item.due_date) : ''}</div>
+            <div style="margin-top:8px;">${escapeStudentHtml(item.description)}</div>
+            ${submitted ? `<div class="tiny" style="margin-top:8px;">Your submission: ${escapeStudentHtml(item.my_submission.content)}</div>` : ''}
+            <textarea id="submission_${item.id}" placeholder="Write your answer / GitHub link / deployed link" style="margin-top:10px; min-height:72px;">${submitted ? escapeStudentHtml(item.my_submission.content) : ''}</textarea>
+            <button class="btn-secondary" onclick="submitAssignment(${item.id})">${submitted ? 'Update Submission' : 'Submit Task'}</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeStudentHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function submitAssignment(assignmentId) {
+      const textarea = document.getElementById(`submission_${assignmentId}`);
+      const content = textarea ? textarea.value.trim() : '';
+      if (!content) {
+        alert('Please write your submission first.');
+        return;
+      }
+      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        alert(data.error || 'Could not submit assignment.');
+        return;
+      }
+      alert('Assignment submitted successfully.');
+      await fetchStudentAssignments();
+    }
+
+    prefillStudentProfile();
+    loadActiveRooms();
+    fetchStudentAssignments();
+  </script>
+</body>
+</html>

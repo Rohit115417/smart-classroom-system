@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e5e7eb; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 18px; margin-bottom: 18px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .grid-2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .metric { background: #020617; border: 1px solid #334155; border-radius: 12px; padding: 16px; }
+    .metric .label { color: #94a3b8; font-size: 13px; margin-bottom: 8px; }
+    .metric .value { font-size: 28px; font-weight: 700; }
+    input, textarea, button { font: inherit; }
+    input, textarea { width: 100%; background: #020617; color: #e5e7eb; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
+    textarea { min-height: 88px; resize: vertical; }
+    button { border: 0; border-radius: 10px; padding: 11px 15px; cursor: pointer; font-weight: 700; }
+    .primary { background: #4f46e5; color: white; }
+    .secondary { background: #334155; color: white; }
+    .success { background: #15803d; color: white; }
+    .warning { background: #a16207; color: white; }
+    .danger { background: #b91c1c; color: white; }
+    .remove-btn { background: #dc2626; color: white; padding: 8px 12px; }
+    video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; object-fit: cover; }
+    .badge { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .live { background: rgba(34, 197, 94, .2); color: #4ade80; }
+    .offline { background: rgba(239, 68, 68, .2); color: #f87171; }
+    .muted { color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #334155; vertical-align: top; }
+    th { color: #94a3b8; font-size: 13px; }
+    .chat-list, .alert-list, .announcement-list, .report-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+    .item { background: #020617; border: 1px solid #334155; border-radius: 12px; padding: 12px; }
+    .item small { color: #94a3b8; display: block; margin-top: 4px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .tiny { font-size: 12px; color: #94a3b8; }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-left: 8px; }
+    .pill.red { background: rgba(220, 38, 38, .2); color: #fca5a5; }
+    .pill.green { background: rgba(22, 163, 74, .2); color: #86efac; }
+    .pill.yellow { background: rgba(202, 138, 4, .2); color: #fde68a; }
+    @media (max-width: 1100px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" style="margin-bottom:18px; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0;">Teacher Portal</h2>
+        <div class="tiny" style="margin-top:4px;">Logged in as {{ current_user_payload.name }} • Teacher</div>
+      </div>
+      <a href="{{ url_for('logout_page') }}" style="color:#fecaca; font-weight:800; text-decoration:none;">Logout</a>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <div>
+          <h1 style="margin:0 0 6px;">Teacher Dashboard</h1>
+          <div class="muted">Live class control, attendance, low-attention alerts, announcements, chat, and session reporting.</div>
+        </div>
+        <div id="roomStatus"><span class="badge offline">OFFLINE</span></div>
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <input id="teacherName" type="text" placeholder="Teacher Name" value="{{ current_user_payload.name }}" />
+        <input id="roomName" type="text" placeholder="Room Name" value="Class Name" />
+        <input id="subject" type="text" placeholder="Subject" value="Computer Science" />
+        <input id="roomPassword" type="text" placeholder="Room Password" value="1234" />
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <textarea id="roomDescription" placeholder="Room description / agenda">Focus-tracked live class with analytics and chat.</textarea>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button class="primary" onclick="createRoom()">Create Room</button>
+        <button class="secondary" onclick="copyRoomId()">Copy Room ID</button>
+        <button class="success" onclick="setRoomLive(true)">Go Live</button>
+        <button class="warning" onclick="setRoomLive(false)">Pause</button>
+        <button class="danger" onclick="endRoom()">End Room</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="margin-top:0;">Teacher Media Preview</h3>
+        <video id="teacherPreview" autoplay playsinline muted></video>
+        <div class="row" style="margin-top:12px;">
+          <button class="secondary" onclick="startCamera()">Start Camera + Mic</button>
+          <button class="secondary" onclick="toggleMic()" id="micToggleBtn">Mute Mic</button>
+          <button class="primary" onclick="startScreenShare()" id="shareScreenBtn">Share Screen</button>
+          <button class="warning" onclick="stopScreenShare()" id="stopShareBtn">Stop Share</button>
+          <button class="warning" onclick="stopCamera()">Stop All Media</button>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <div class="tiny">Mic: <span id="micState">Off</span></div>
+          <div class="tiny">Screen Share: <span id="screenShareState">Off</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Room Details</h3>
+        <div class="tiny">Room ID</div>
+        <div id="roomDisplay" style="font-size:30px; font-weight:800; margin:6px 0 12px;">Not created</div>
+        <div class="tiny">Subject</div>
+        <div id="subjectDisplay" style="margin:4px 0 10px;">--</div>
+        <div class="tiny">Description</div>
+        <div id="descriptionDisplay">--</div>
+        <div style="margin-top:14px;" class="tiny">Password Protection</div>
+        <div id="passwordState">Disabled</div>
+      </div>
+    </div>
+
+    <div class="grid-4">
+      <div class="metric"><div class="label">Viewers</div><div class="value" id="viewerCount">0</div></div>
+      <div class="metric"><div class="label">Students Reporting</div><div class="value" id="studentCount">0</div></div>
+      <div class="metric"><div class="label">Average Attention</div><div class="value" id="avgAttention">0%</div></div>
+      <div class="metric"><div class="label">Raised Hands</div><div class="value" id="raisedHandsCount">0</div></div>
+    </div>
+
+    <div class="grid-4">
+      <div class="metric"><div class="label">Session Duration</div><div class="value" id="sessionDuration">00:00</div></div>
+      <div class="metric"><div class="label">Low Attention Alerts</div><div class="value" id="alertCount">0</div></div>
+      <div class="metric"><div class="label">Chat Messages</div><div class="value" id="chatCount">0</div></div>
+      <div class="metric"><div class="label">Attendance Records</div><div class="value" id="attendanceCount">0</div></div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="toolbar"><h3 style="margin:0;">Low-Attention Alerts</h3><span class="tiny" id="lastRefresh">--</span></div>
+        <div id="alertList" class="alert-list"><div class="item muted">No alerts yet.</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Teacher Announcement</h3>
+        <textarea id="announcementInput" placeholder="Send a room-wide announcement"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button class="primary" onclick="sendAnnouncement()">Send Announcement</button>
+        </div>
+        <div id="announcementList" class="announcement-list" style="margin-top:12px;"><div class="item muted">No announcements yet.</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Live Chat</h3>
+        <div id="chatList" class="chat-list"><div class="item muted">No messages yet.</div></div>
+        <textarea id="teacherChatInput" placeholder="Reply to the room"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button class="secondary" onclick="sendTeacherChat()">Send Reply</button>
+        </div>
+      </div>
+    </div>
+
+
+
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0;">Assignments / Task Management</h2>
+        <button class="secondary" onclick="fetchAssignments()">Refresh Assignments</button>
+      </div>
+      <div class="grid-3" style="margin-top:14px;">
+        <input id="assignmentTitle" type="text" placeholder="Assignment title" />
+        <input id="assignmentDueDate" type="datetime-local" />
+        <button class="primary" onclick="createAssignment()">Create Assignment</button>
+      </div>
+      <textarea id="assignmentDescription" placeholder="Assignment description, instructions, expected output, submission format" style="margin-top:12px;"></textarea>
+      <div id="assignmentList" class="report-list" style="margin-top:12px;"><div class="item muted">Create a room first, then add assignments.</div></div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0;">Live Student Analytics</h2>
+        <div class="row">
+          <button class="secondary" onclick="refreshReport()">Refresh Report</button>
+          <button class="success" onclick="exportAttendanceCsv()">Export Attendance CSV</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Attention</th>
+            <th>Status</th>
+            <th>Hand</th>
+            <th>Alerts</th>
+            <th>Presence</th>
+            <th>Activity</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="statTable"><tr><td colspan="8" class="muted">No room selected.</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <h3 style="margin-top:0;">Attendance Summary</h3>
+        <div id="attendanceList" class="report-list"><div class="item muted">No attendance data.</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Top Attention Leaderboard</h3>
+        <div id="leaderboardList" class="report-list"><div class="item muted">No leaderboard data.</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Session Report</h3>
+        <div id="reportSummary" class="report-list"><div class="item muted">No report yet.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const CURRENT_USER = {{ current_user_payload|tojson }};
+    const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    const STATS_INTERVAL = 3000;
+    const SIGNAL_INTERVAL = 1000;
+    const CHAT_INTERVAL = 2500;
+    const ANNOUNCEMENT_INTERVAL = 3000;
+
+    let currentRoomId = null;
+    let localStream = null;
+    let cameraStream = null;
+    let screenStream = null;
+    let micEnabled = true;
+    let statsIntervalId = null;
+    let signalIntervalId = null;
+    let chatIntervalId = null;
+    let announcementIntervalId = null;
+    let durationIntervalId = null;
+    let lastTeacherSignalId = 0;
+    let lastChatTs = 0;
+    let lastAnnouncementTs = 0;
+    let currentReport = null;
+    let sessionStartedAt = null;
+    const peers = new Map();
+    const alertLog = [];
+
+    function roomReady() {
+      if (!currentRoomId) {
+        alert('Create a room first.');
+        return false;
+      }
+      return true;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderRoomStatus(isLive) {
+      document.getElementById('roomStatus').innerHTML = isLive
+        ? '<span class="badge live">LIVE</span>'
+        : '<span class="badge offline">OFFLINE</span>';
+    }
+
+    function formatSeconds(value) {
+      const mm = String(Math.floor(value / 60)).padStart(2, '0');
+      const ss = String(value % 60).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function startSessionClock() {
+      if (durationIntervalId) clearInterval(durationIntervalId);
+      sessionStartedAt = Date.now();
+      durationIntervalId = setInterval(() => {
+        const seconds = Math.floor((Date.now() - sessionStartedAt) / 1000);
+        document.getElementById('sessionDuration').textContent = formatSeconds(seconds);
+      }, 1000);
+    }
+
+    async function createRoom() {
+      const roomName = document.getElementById('roomName').value.trim() || 'Demo Class';
+      const teacherName = document.getElementById('teacherName').value.trim() || 'Admin';
+      const subject = document.getElementById('subject').value.trim();
+      const description = document.getElementById('roomDescription').value.trim();
+      const password = document.getElementById('roomPassword').value.trim();
+
+      const response = await fetch(`${API_BASE}/api/stream/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_name: roomName, teacher_name: teacherName, subject, description, password, is_live: false })
+      });
+      const data = await response.json();
+      currentRoomId = data.room_id;
+      lastTeacherSignalId = 0;
+      lastChatTs = 0;
+      lastAnnouncementTs = 0;
+      alertLog.length = 0;
+      document.getElementById('roomDisplay').textContent = currentRoomId;
+      document.getElementById('subjectDisplay').textContent = data.subject || '--';
+      document.getElementById('descriptionDisplay').textContent = data.description || '--';
+      document.getElementById('passwordState').textContent = data.requires_password ? 'Enabled' : 'Disabled';
+      renderRoomStatus(false);
+      startSessionClock();
+
+      if (statsIntervalId) clearInterval(statsIntervalId);
+      if (signalIntervalId) clearInterval(signalIntervalId);
+      if (chatIntervalId) clearInterval(chatIntervalId);
+      if (announcementIntervalId) clearInterval(announcementIntervalId);
+
+      statsIntervalId = setInterval(updateStats, STATS_INTERVAL);
+      signalIntervalId = setInterval(pollTeacherSignals, SIGNAL_INTERVAL);
+      chatIntervalId = setInterval(fetchChats, CHAT_INTERVAL);
+      announcementIntervalId = setInterval(fetchAnnouncements, ANNOUNCEMENT_INTERVAL);
+
+      await updateStats();
+      await fetchChats();
+      await fetchAnnouncements();
+      await fetchAssignments();
+    }
+
+    function updateMediaIndicators() {
+      document.getElementById('micState').textContent = cameraStream && cameraStream.getAudioTracks().some(track => track.enabled) ? 'On' : 'Off';
+      document.getElementById('screenShareState').textContent = screenStream ? 'On' : 'Off';
+      document.getElementById('micToggleBtn').textContent = cameraStream && cameraStream.getAudioTracks().some(track => track.enabled) ? 'Mute Mic' : 'Unmute Mic';
+    }
+
+    async function rebuildLocalStream() {
+      const nextStream = new MediaStream();
+      const screenVideoTrack = screenStream ? screenStream.getVideoTracks()[0] : null;
+      const cameraVideoTrack = cameraStream ? cameraStream.getVideoTracks()[0] : null;
+      const micTrack = cameraStream ? cameraStream.getAudioTracks()[0] : null;
+
+      const activeVideoTrack = screenVideoTrack || cameraVideoTrack;
+      if (activeVideoTrack) nextStream.addTrack(activeVideoTrack);
+      if (micTrack) nextStream.addTrack(micTrack);
+
+      localStream = nextStream.getTracks().length ? nextStream : null;
+      document.getElementById('teacherPreview').srcObject = localStream;
+      updateMediaIndicators();
+      await syncPeersWithLocalStream();
+
+      if (currentRoomId) {
+        await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_camera_on: Boolean(activeVideoTrack) })
+        });
+      }
+    }
+
+    async function startCamera() {
+      try {
+        if (!cameraStream) {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        }
+        micEnabled = true;
+        cameraStream.getAudioTracks().forEach(track => { track.enabled = true; });
+        await rebuildLocalStream();
+      } catch (error) {
+        alert(`Could not start camera/mic: ${error.message}`);
+      }
+    }
+
+    async function toggleMic() {
+      if (!cameraStream) {
+        await startCamera();
+        return;
+      }
+      micEnabled = !cameraStream.getAudioTracks().every(track => !track.enabled);
+      const shouldEnable = !cameraStream.getAudioTracks().some(track => track.enabled);
+      cameraStream.getAudioTracks().forEach(track => { track.enabled = shouldEnable; });
+      await rebuildLocalStream();
+    }
+
+    async function startScreenShare() {
+      try {
+        if (!cameraStream) await startCamera();
+        if (screenStream) return;
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const [track] = screenStream.getVideoTracks();
+        if (track) {
+          track.onended = async () => {
+            screenStream = null;
+            await rebuildLocalStream();
+          };
+        }
+        await rebuildLocalStream();
+      } catch (error) {
+        alert(`Could not share screen: ${error.message}`);
+      }
+    }
+
+    async function stopScreenShare() {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+        await rebuildLocalStream();
+      }
+    }
+
+    async function stopCamera() {
+      if (screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+      }
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+      localStream = null;
+      document.getElementById('teacherPreview').srcObject = null;
+      updateMediaIndicators();
+      closeAllPeers();
+      if (currentRoomId) {
+        await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_camera_on: false, is_live: false })
+        });
+        renderRoomStatus(false);
+      }
+    }
+
+    async function syncPeersWithLocalStream() {
+      const desiredVideoTrack = localStream ? localStream.getVideoTracks()[0] || null : null;
+      const desiredAudioTrack = localStream ? localStream.getAudioTracks()[0] || null : null;
+
+      for (const [studentId, pc] of peers.entries()) {
+        for (const kind of ['video', 'audio']) {
+          const sender = pc.getSenders().find(item => item.track && item.track.kind === kind);
+          const desiredTrack = kind === 'video' ? desiredVideoTrack : desiredAudioTrack;
+          if (sender) {
+            await sender.replaceTrack(desiredTrack || null);
+          } else if (desiredTrack) {
+            pc.addTrack(desiredTrack, localStream);
+          }
+        }
+      }
+    }
+
+    async function setRoomLive(isLive) {
+      if (!roomReady()) return;
+      if (isLive && !localStream) {
+        await startCamera();
+        if (!localStream) return;
+      }
+      await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_live: isLive, teacher_camera_on: Boolean(localStream) })
+      });
+      renderRoomStatus(isLive);
+      if (!isLive) closeAllPeers();
+      await updateStats();
+    }
+
+    function renderAlerts() {
+      const box = document.getElementById('alertList');
+      if (!alertLog.length) {
+        box.innerHTML = '<div class="item muted">No alerts yet.</div>';
+        return;
+      }
+      box.innerHTML = alertLog.slice().reverse().map(item => `
+        <div class="item">
+          <strong>${escapeHtml(item.name || item.student_id || 'Student')}</strong>
+          <span class="pill red">${Number(item.attention || 0)}%</span>
+          <small>${new Date((item.ts || 0) * 1000).toLocaleTimeString()}</small>
+        </div>
+      `).join('');
+    }
+
+    function renderAnnouncements(items) {
+      const box = document.getElementById('announcementList');
+      if (!items.length) {
+        box.innerHTML = '<div class="item muted">No announcements yet.</div>';
+        return;
+      }
+      box.innerHTML = items.slice().reverse().map(item => `
+        <div class="item"><strong>${escapeHtml(item.teacher_name || 'Teacher')}</strong><div>${escapeHtml(item.text)}</div><small>${new Date((item.ts || 0) * 1000).toLocaleTimeString()}</small></div>
+      `).join('');
+    }
+
+    function renderChats(items) {
+      const box = document.getElementById('chatList');
+      document.getElementById('chatCount').textContent = String(items.length);
+      if (!items.length) {
+        box.innerHTML = '<div class="item muted">No messages yet.</div>';
+        return;
+      }
+      box.innerHTML = items.slice().reverse().map(item => `
+        <div class="item"><strong>${escapeHtml(item.name)}</strong> <span class="tiny">${escapeHtml(item.author_type)}</span><div>${escapeHtml(item.text)}</div><small>${new Date((item.ts || 0) * 1000).toLocaleTimeString()}</small></div>
+      `).join('');
+    }
+
+    function renderReport(report) {
+      currentReport = report;
+      document.getElementById('attendanceCount').textContent = String((report.attendance || []).length);
+
+      const leaderboard = document.getElementById('leaderboardList');
+      const attendance = document.getElementById('attendanceList');
+      const summary = document.getElementById('reportSummary');
+
+      leaderboard.innerHTML = (report.leaderboard || []).length
+        ? report.leaderboard.map((item, idx) => `<div class="item"><strong>#${idx + 1} ${escapeHtml(item.name || item.student_id)}</strong><div>${Number(item.attention || 0)}% attention</div><small>${escapeHtml(item.status || '--')}</small></div>`).join('')
+        : '<div class="item muted">No leaderboard data.</div>';
+
+      attendance.innerHTML = (report.attendance || []).length
+        ? report.attendance.map((item) => `<div class="item"><strong>${escapeHtml(item.name || item.student_id)}</strong><div>${formatSeconds(Number(item.total_watch_seconds || 0))} watched</div><small>${Number(item.attendance_percent || 0)}% attendance • joins ${Number(item.join_count || 0)}</small></div>`).join('')
+        : '<div class="item muted">No attendance data.</div>';
+
+      const lowAttention = report.low_attention_students || [];
+      summary.innerHTML = `
+        <div class="item"><strong>Students Seen</strong><div>${Number(report.total_students_seen || 0)}</div></div>
+        <div class="item"><strong>Active Students</strong><div>${Number(report.active_students || 0)}</div></div>
+        <div class="item"><strong>Average Attention</strong><div>${Number(report.average_attention || 0)}%</div></div>
+        <div class="item"><strong>Low Attention Now</strong><div>${lowAttention.length}</div></div>
+        <div class="item"><strong>Session Length</strong><div>${formatSeconds(Number(report.session_seconds || 0))}</div></div>
+      `;
+    }
+
+    async function updateStats() {
+      if (!currentRoomId) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/analytics`);
+      if (!response.ok) return;
+      const data = await response.json();
+      const students = data.students || [];
+      const avg = students.length ? Math.round(students.reduce((sum, s) => sum + Number(s.attention || 0), 0) / students.length) : 0;
+      const raisedHands = students.filter(s => s.hand_raised).length;
+      const alerts = students.reduce((sum, s) => sum + Number(s.alert_count || 0), 0);
+
+      document.getElementById('viewerCount').textContent = String(data.viewer_count || 0);
+      document.getElementById('studentCount').textContent = String(students.length);
+      document.getElementById('avgAttention').textContent = `${avg}%`;
+      document.getElementById('raisedHandsCount').textContent = String(raisedHands);
+      document.getElementById('alertCount').textContent = String(alerts);
+      document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
+      renderRoomStatus(Boolean(data.room && data.room.is_live));
+      renderReport(data.report || { attendance: [], leaderboard: [], low_attention_students: [] });
+
+      const body = document.getElementById('statTable');
+      if (!students.length) {
+        body.innerHTML = '<tr><td colspan="8" class="muted">No active student updates yet.</td></tr>';
+      } else {
+        body.innerHTML = students.map(student => `
+          <tr>
+            <td><strong>${escapeHtml(student.name || '--')}</strong><div class="tiny">${escapeHtml(student.student_id || '--')}</div></td>
+            <td>${Number(student.attention || 0)}%</td>
+            <td>${escapeHtml(student.status || '--')}<div class="tiny">${escapeHtml(student.mood || '--')}</div></td>
+            <td>${student.hand_raised ? '<span class="pill yellow">Raised</span>' : '<span class="pill green">Down</span>'}</td>
+            <td>${Number(student.alert_count || 0)}</td>
+            <td><div class="tiny">Away: ${Number(student.away_count || 0)}</div><div class="tiny">Tab switches: ${Number(student.tab_switch_count || 0)}</div></td>
+            <td>${new Date((student.last_seen || 0) * 1000).toLocaleTimeString()}</td>
+            <td><button class="remove-btn" onclick="removeStudent('${student.student_id}','${escapeHtml(student.name || student.student_id)}')">Remove</button></td>
+          </tr>
+        `).join('');
+      }
+      await ensurePeersForStudents(students.map(student => student.student_id));
+    }
+
+    async function removeStudent(studentId, studentName) {
+      if (!currentRoomId) {
+        alert('Room not active');
+        return;
+      }
+      const confirmRemove = confirm(`Remove ${studentName}?`);
+      if (!confirmRemove) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/student/${studentId}/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Removed by teacher' })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Remove failed');
+        return;
+      }
+      await updateStats();
+    }
+
+    async function sendAnnouncement() {
+      if (!roomReady()) return;
+      const text = document.getElementById('announcementInput').value.trim();
+      if (!text) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/announcements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Announcement failed');
+        return;
+      }
+      document.getElementById('announcementInput').value = '';
+      await fetchAnnouncements();
+    }
+
+    async function fetchAnnouncements() {
+      if (!currentRoomId) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/announcements?since=${lastAnnouncementTs}`);
+      const data = await response.json();
+      const all = await (await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/announcements?since=0`)).json();
+      for (const item of (data.announcements || [])) {
+        lastAnnouncementTs = Math.max(lastAnnouncementTs, Number(item.ts || 0));
+      }
+      renderAnnouncements(all.announcements || []);
+    }
+
+    async function sendTeacherChat() {
+      if (!roomReady()) return;
+      const text = document.getElementById('teacherChatInput').value.trim();
+      if (!text) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author_type: 'teacher', author_id: 'teacher', name: document.getElementById('teacherName').value.trim() || 'Teacher', text })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Chat send failed');
+        return;
+      }
+      document.getElementById('teacherChatInput').value = '';
+      await fetchChats();
+    }
+
+    async function fetchChats() {
+      if (!currentRoomId) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/chat?since=${lastChatTs}`);
+      const data = await response.json();
+      const all = await (await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/chat?since=0`)).json();
+      for (const item of (data.messages || [])) {
+        lastChatTs = Math.max(lastChatTs, Number(item.ts || 0));
+      }
+      renderChats(all.messages || []);
+    }
+
+    async function refreshReport() {
+      if (!roomReady()) return;
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/report`);
+      const data = await response.json();
+      renderReport(data);
+    }
+
+    function exportAttendanceCsv() {
+      if (!currentReport || !currentReport.attendance || !currentReport.attendance.length) {
+        alert('No attendance data to export.');
+        return;
+      }
+      const rows = [
+        ['Student ID', 'Name', 'Join Count', 'Present', 'First Join', 'Last Join', 'Last Leave', 'Watch Seconds', 'Attendance %'],
+        ...currentReport.attendance.map(item => [
+          item.student_id || '',
+          item.name || '',
+          Number(item.join_count || 0),
+          item.is_present ? 'Yes' : 'No',
+          item.first_join_ts ? new Date(item.first_join_ts * 1000).toLocaleString() : '',
+          item.last_join_ts ? new Date(item.last_join_ts * 1000).toLocaleString() : '',
+          item.last_leave_ts ? new Date(item.last_leave_ts * 1000).toLocaleString() : '',
+          Number(item.total_watch_seconds || 0),
+          Number(item.attendance_percent || 0)
+        ])
+      ];
+      const csv = rows.map(row => row.map(col => `"${String(col).replaceAll('"', '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${currentRoomId || 'room'}-attendance.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function ensurePeersForStudents(studentIds) {
+      if (!currentRoomId || !localStream) return;
+      const roomInfoResponse = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/info`);
+      const roomInfo = await roomInfoResponse.json();
+      if (!roomInfo.is_live) return;
+
+      for (const studentId of studentIds) {
+        if (!studentId) continue;
+        if (!peers.has(studentId)) await createOfferForStudent(studentId);
+      }
+      for (const existingId of Array.from(peers.keys())) {
+        if (!studentIds.includes(existingId)) {
+          const pc = peers.get(existingId);
+          if (pc) pc.close();
+          peers.delete(existingId);
+        }
+      }
+    }
+
+    async function createOfferForStudent(studentId) {
+      if (!localStream) return;
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      peers.set(studentId, pc);
+      if (!localStream) return;
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      pc.onicecandidate = async (event) => {
+        if (!event.candidate) return;
+        await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/signal/student/${studentId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: { type: 'candidate', candidate: event.candidate } })
+        });
+      };
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (['failed', 'closed', 'disconnected'].includes(state)) {
+          peers.delete(studentId);
+          pc.close();
+        }
+      };
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/signal/student/${studentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: { type: 'offer', offer: pc.localDescription } })
+      });
+    }
+
+    async function pollTeacherSignals() {
+      if (!currentRoomId) return;
+      try {
+        const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/signal/teacher?since=${lastTeacherSignalId}`);
+        const data = await response.json();
+        for (const message of (data.messages || [])) {
+          lastTeacherSignalId = Math.max(lastTeacherSignalId, message.id);
+          const payload = message.payload || {};
+          const studentId = message.student_id;
+
+          if (payload.type === 'student_joined') {
+            if (localStream) {
+              const roomInfoResponse = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}/info`);
+              const roomInfo = await roomInfoResponse.json();
+              if (roomInfo.is_live && !peers.has(studentId)) await createOfferForStudent(studentId);
+            }
+          } else if (payload.type === 'answer' && peers.has(studentId)) {
+            await peers.get(studentId).setRemoteDescription(new RTCSessionDescription(payload.answer));
+          } else if (payload.type === 'candidate' && peers.has(studentId)) {
+            try { await peers.get(studentId).addIceCandidate(payload.candidate); } catch (error) { console.error(error); }
+          } else if (payload.type === 'student_left' && peers.has(studentId)) {
+            peers.get(studentId).close();
+            peers.delete(studentId);
+          } else if (payload.type === 'low_attention_alert') {
+            alertLog.push({ ...payload, ts: message.ts });
+            while (alertLog.length > 50) alertLog.shift();
+            renderAlerts();
+          } else if (payload.type === 'hand_update') {
+            await updateStats();
+          }
+        }
+      } catch (error) {
+        console.error('Teacher signal poll error', error);
+      }
+    }
+
+    function closeAllPeers() {
+      for (const pc of peers.values()) pc.close();
+      peers.clear();
+    }
+
+    async function endRoom() {
+      if (!currentRoomId) {
+        alert('No room to end.');
+        return;
+      }
+      await stopCamera();
+      const response = await fetch(`${API_BASE}/api/stream/room/${currentRoomId}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (data.report) renderReport(data.report);
+      if (statsIntervalId) clearInterval(statsIntervalId);
+      if (signalIntervalId) clearInterval(signalIntervalId);
+      if (chatIntervalId) clearInterval(chatIntervalId);
+      if (announcementIntervalId) clearInterval(announcementIntervalId);
+      if (durationIntervalId) clearInterval(durationIntervalId);
+      statsIntervalId = null;
+      signalIntervalId = null;
+      chatIntervalId = null;
+      announcementIntervalId = null;
+      durationIntervalId = null;
+      currentRoomId = null;
+      lastTeacherSignalId = 0;
+      document.getElementById('roomDisplay').textContent = 'Not created';
+      document.getElementById('viewerCount').textContent = '0';
+      document.getElementById('studentCount').textContent = '0';
+      document.getElementById('avgAttention').textContent = '0%';
+      document.getElementById('raisedHandsCount').textContent = '0';
+      document.getElementById('sessionDuration').textContent = '00:00';
+      document.getElementById('statTable').innerHTML = '<tr><td colspan="8" class="muted">Room ended.</td></tr>';
+      document.getElementById('assignmentList').innerHTML = '<div class="item muted">Create a room first, then add assignments.</div>';
+      renderRoomStatus(false);
+    }
+
+    async function copyRoomId() {
+      if (!roomReady()) return;
+      try {
+        await navigator.clipboard.writeText(currentRoomId);
+        alert(`Room ID copied: ${currentRoomId}`);
+      } catch (error) {
+        alert(`Room ID: ${currentRoomId}`);
+      }
+    }
+
+
+    async function fetchAssignments() {
+      const box = document.getElementById('assignmentList');
+      if (!box) return;
+      if (!currentRoomId) {
+        box.innerHTML = '<div class="item muted">Create a room first, then assignments will appear here.</div>';
+        return;
+      }
+      try {
+        const response = await fetch(`${API_BASE}/api/assignments?room_id=${encodeURIComponent(currentRoomId)}`);
+        const data = await response.json();
+        renderAssignments(data.assignments || []);
+      } catch (error) {
+        box.innerHTML = `<div class="item muted">Could not load assignments: ${error.message}</div>`;
+      }
+    }
+
+    function renderAssignments(items) {
+      const box = document.getElementById('assignmentList');
+      if (!box) return;
+      if (!items.length) {
+        box.innerHTML = '<div class="item muted">No assignments yet.</div>';
+        return;
+      }
+      box.innerHTML = items.map(item => `
+        <div class="item">
+          <div class="toolbar">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span class="pill green">${Number(item.submission_count || 0)} submissions</span>
+          </div>
+          <div class="tiny" style="margin-top:6px;">Room: ${escapeHtml(item.room_id)} ${item.due_date ? '• Due: ' + escapeHtml(item.due_date) : ''}</div>
+          <div style="margin-top:8px;">${escapeHtml(item.description)}</div>
+          <div style="margin-top:10px;">
+            ${(item.submissions || []).length ? item.submissions.map(sub => `
+              <div class="item" style="margin-top:8px;">
+                <strong>${escapeHtml(sub.student_name)} (${escapeHtml(sub.student_id)})</strong>
+                <div style="margin-top:6px;">${escapeHtml(sub.content)}</div>
+                <small>${new Date((sub.submitted_at || 0) * 1000).toLocaleString()}</small>
+              </div>
+            `).join('') : '<div class="tiny">No submissions yet.</div>'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function createAssignment() {
+      if (!roomReady()) return;
+      const title = document.getElementById('assignmentTitle').value.trim();
+      const description = document.getElementById('assignmentDescription').value.trim();
+      const dueDate = document.getElementById('assignmentDueDate').value;
+      if (!title || !description) {
+        alert('Assignment title and description are required.');
+        return;
+      }
+      const response = await fetch(`${API_BASE}/api/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_id: currentRoomId, title, description, due_date: dueDate })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        alert(data.error || 'Could not create assignment.');
+        return;
+      }
+      document.getElementById('assignmentTitle').value = '';
+      document.getElementById('assignmentDescription').value = '';
+      document.getElementById('assignmentDueDate').value = '';
+      await fetchAssignments();
+    }
+
+  </script>
+</body>
+</html>
